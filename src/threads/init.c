@@ -133,7 +133,56 @@ pintos_init (void)
     /* Run actions specified on kernel command line. */
     run_actions (argv);
   } else {
-    // TODO: no command line passed to kernel. Run interactively 
+    /* Run simple kernel shell*/
+    uint8_t buf[64];
+    int32_t buflen=0;
+    uint8_t prompt[]="PKUOS> ";
+    uint8_t studentID[]="2200012861";
+    uint8_t invalid_command[]="invalid command";
+
+    while(true){
+      printf("%s",prompt);
+      uint8_t c;
+
+      /* read a line of command ended by return */
+      while(true){
+        c=input_getc();
+        /* type carriage return */
+        if(c==13){
+          buf[buflen]=0;
+          buflen=0;
+          printf("\n");
+          break;
+        }
+        /* type backspace or del */
+        else if(c==8||c==127){
+          if(buflen>0){
+            buflen--;
+            /* move back the cursor and fill with a space to cover it and move back again*/
+            printf("\b \b");
+          }
+        }
+        else{
+          printf("%c",c);
+          buf[buflen++]=c;
+        }
+      }
+      
+      /* parse the command */
+      if(strcmp(buf,"whoami")==0){
+        printf("%s\n",studentID);
+      }
+      else if(strcmp(buf,"exit")==0){
+        break;
+      }
+      else if(buf[0]==0){
+        continue;
+      }
+      else{
+        printf("%s\n",invalid_command);
+      }
+    }
+
   }
 
   /* Finish up. */

@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "../devices/timer.h"
 
 #ifdef USERPROG
 #include "userprog/process.h"
@@ -24,6 +25,9 @@
 /** List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
+
+/** List of processes in sleep*/
+static struct list sleep_list;
 
 /** List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -71,6 +75,7 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+static bool compare_wake_ticks(const struct list_elem* a,const struct list_elem* b,void* aux);
 
 /** Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -93,6 +98,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleep_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -241,6 +247,40 @@ thread_unblock (struct thread *t)
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
+}
+
+/** Invoked by timer_sleep() in timer.c. Block the current thread until wake_ticks*/
+void 
+thread_sleep(int64_t wake_ticks){
+  struct thread* t=thread_current();
+  if(t==idle_thread){
+    return;
+  }
+  t->wake_ticks=wake_ticks;
+  enum intr_level old_level=intr_disable();
+  list_insert_ordered(&sleep_list,&t->elem,compare_wake_ticks,NULL);
+  thread_block();
+
+  intr_set_level(old_level);
+}
+
+/** Invoked by timer_interrupt(). Wake the sleep threads in sleep_list
+ *  Warning: an struct list_elem type object in struct thread can be only appeared in ONE 
+ * struct list,i.e., the state of a thread can be one of THREAD_BLOCKED(in sleep_list), THREAD_READY(in read_list),
+ * THREAD_RUNNING.
+ * For this, struct list_elem elem can appear either in ready_list or sleep_list.
+*/
+void 
+thread_wake(){
+  struct list_elem *e;
+  for (e = list_begin(&sleep_list); e != list_end(&sleep_list);) {
+    struct thread *t = list_entry(e, struct thread, elem);
+    if (t->wake_ticks <= timer_ticks()) {
+      e=list_remove(e);
+      thread_unblock(t);
+    } 
+    else break;
+  }
 }
 
 /** Returns the name of the running thread. */
@@ -583,3 +623,11 @@ allocate_tid (void)
 /** Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+/** list_less_func*/
+static bool 
+compare_wake_ticks(const struct list_elem* a,const struct list_elem* b,void* aux){
+  struct thread *t_a = list_entry(a, struct thread, elem);
+  struct thread *t_b = list_entry(b, struct thread, elem);
+  return t_a->wake_ticks<t_b->wake_ticks;
+}

@@ -1,0 +1,204 @@
+./devices/timer.c:20:/** Number of timer ticks since OS booted. */
+./devices/timer.c:21:static int64_t ticks;
+./devices/timer.c:69:/** Returns the number of timer ticks since the OS booted. */
+./devices/timer.c:71:timer_ticks (void) 
+./devices/timer.c:74:  int64_t t = ticks;
+./devices/timer.c:79:/** Returns the number of timer ticks elapsed since THEN, which
+./devices/timer.c:80:   should be a value once returned by timer_ticks(). */
+./devices/timer.c:84:  return timer_ticks () - then;
+./devices/timer.c:87:/** Sleeps for approximately TICKS timer ticks.  Interrupts must
+./devices/timer.c:90:timer_sleep (int64_t ticks) 
+./devices/timer.c:92:  int64_t start = timer_ticks ();
+./devices/timer.c:95:  while (timer_elapsed (start) < ticks) 
+./devices/timer.c:127:   interrupts off for the interval between timer ticks or longer
+./devices/timer.c:128:   will cause timer ticks to be lost.  Thus, use timer_msleep()
+./devices/timer.c:140:   interrupts off for the interval between timer ticks or longer
+./devices/timer.c:141:   will cause timer ticks to be lost.  Thus, use timer_usleep()
+./devices/timer.c:153:   interrupts off for the interval between timer ticks or longer
+./devices/timer.c:154:   will cause timer ticks to be lost.  Thus, use timer_nsleep()
+./devices/timer.c:166:  printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
+./devices/timer.c:173:  ticks++;
+./devices/timer.c:183:  int64_t start = ticks;
+./devices/timer.c:184:  while (ticks == start)
+./devices/timer.c:188:  start = ticks;
+./devices/timer.c:193:  return start != ticks;
+./devices/timer.c:214:  /* Convert NUM/DENOM seconds into timer ticks, rounding down.
+./devices/timer.c:217:     ---------------------- = NUM * TIMER_FREQ / DENOM ticks. 
+./devices/timer.c:218:     1 s / TIMER_FREQ ticks
+./devices/timer.c:220:  int64_t ticks = num * TIMER_FREQ / denom;
+./devices/timer.c:223:  if (ticks > 0)
+./devices/timer.c:228:      timer_sleep (ticks); 
+./devices/timer.h:13:int64_t timer_ticks (void);
+./devices/timer.h:17:void timer_sleep (int64_t ticks);
+./tests/tests.pm:52:    fail "\u$run didn't shut down properly: no \"Timer: # ticks\" message\n"
+./tests/tests.pm:53:      if !grep (/Timer: \d+ ticks/, @output);
+./tests/threads/alarm-priority.c:24:  wake_time = timer_ticks () + 5 * TIMER_FREQ;
+./tests/threads/alarm-priority.c:45:  int64_t start_time = timer_ticks ();
+./tests/threads/alarm-priority.c:52:  timer_sleep (wake_time - timer_ticks ());
+./tests/threads/alarm-simultaneous.c:43:  msg ("Each thread sleeps 10 ticks each time.");
+./tests/threads/alarm-simultaneous.c:52:  test.start = timer_ticks () + 100;
+./tests/threads/alarm-simultaneous.c:69:  msg ("iteration 0, thread 0: woke up after %d ticks", output[0]);
+./tests/threads/alarm-simultaneous.c:71:    msg ("iteration %d, thread %d: woke up %d ticks later",
+./tests/threads/alarm-simultaneous.c:90:      timer_sleep (sleep_until - timer_ticks ());
+./tests/threads/alarm-simultaneous.c:91:      *test->output_pos++ = timer_ticks () - test->start;
+./tests/threads/alarm-simultaneous.ck:8:(alarm-simultaneous) Each thread sleeps 10 ticks each time.
+./tests/threads/alarm-simultaneous.ck:10:(alarm-simultaneous) iteration 0, thread 0: woke up after 10 ticks
+./tests/threads/alarm-simultaneous.ck:11:(alarm-simultaneous) iteration 0, thread 1: woke up 0 ticks later
+./tests/threads/alarm-simultaneous.ck:12:(alarm-simultaneous) iteration 0, thread 2: woke up 0 ticks later
+./tests/threads/alarm-simultaneous.ck:13:(alarm-simultaneous) iteration 1, thread 0: woke up 10 ticks later
+./tests/threads/alarm-simultaneous.ck:14:(alarm-simultaneous) iteration 1, thread 1: woke up 0 ticks later
+./tests/threads/alarm-simultaneous.ck:15:(alarm-simultaneous) iteration 1, thread 2: woke up 0 ticks later
+./tests/threads/alarm-simultaneous.ck:16:(alarm-simultaneous) iteration 2, thread 0: woke up 10 ticks later
+./tests/threads/alarm-simultaneous.ck:17:(alarm-simultaneous) iteration 2, thread 1: woke up 0 ticks later
+./tests/threads/alarm-simultaneous.ck:18:(alarm-simultaneous) iteration 2, thread 2: woke up 0 ticks later
+./tests/threads/alarm-simultaneous.ck:19:(alarm-simultaneous) iteration 3, thread 0: woke up 10 ticks later
+./tests/threads/alarm-simultaneous.ck:20:(alarm-simultaneous) iteration 3, thread 1: woke up 0 ticks later
+./tests/threads/alarm-simultaneous.ck:21:(alarm-simultaneous) iteration 3, thread 2: woke up 0 ticks later
+./tests/threads/alarm-simultaneous.ck:22:(alarm-simultaneous) iteration 4, thread 0: woke up 10 ticks later
+./tests/threads/alarm-simultaneous.ck:23:(alarm-simultaneous) iteration 4, thread 1: woke up 0 ticks later
+./tests/threads/alarm-simultaneous.ck:24:(alarm-simultaneous) iteration 4, thread 2: woke up 0 ticks later
+./tests/threads/alarm-wait.c:43:    int duration;               /**< Number of ticks to sleep. */
+./tests/threads/alarm-wait.c:63:  msg ("Thread 0 sleeps 10 ticks each time,");
+./tests/threads/alarm-wait.c:64:  msg ("thread 1 sleeps 20 ticks each time, and so on.");
+./tests/threads/alarm-wait.c:75:  test.start = timer_ticks () + 100;
+./tests/threads/alarm-wait.c:147:      timer_sleep (sleep_until - timer_ticks ());
+./tests/threads/mlfqs-block.c:39:  start_time = timer_ticks ();
+./tests/threads/mlfqs-block.c:56:  start_time = timer_ticks ();
+./tests/threads/mlfqs-fair.c:5:   of ticks.  Each test runs for 30 seconds, so the ticks should
+./tests/threads/mlfqs-fair.c:6:   also sum to approximately 30 * 100 == 3000 ticks.
+./tests/threads/mlfqs-fair.c:9:   other with nice 5, which should receive 1,904 and 1,096 ticks,
+./tests/threads/mlfqs-fair.c:14:   and 8 ticks, respectively, over 30 seconds.
+./tests/threads/mlfqs-fair.c:81:  start_time = timer_ticks ();
+./tests/threads/mlfqs-fair.c:98:  msg ("Starting threads took %"PRId64" ticks.", timer_elapsed (start_time));
+./tests/threads/mlfqs-fair.c:104:    msg ("Thread %d received %d ticks.", i, info[i].tick_count);
+./tests/threads/mlfqs-fair.c:119:      int64_t cur_time = timer_ticks ();
+./tests/threads/mlfqs-load-1.c:28:  start_time = timer_ticks ();
+./tests/threads/mlfqs-load-60.c:121:  start_time = timer_ticks ();
+./tests/threads/mlfqs-load-60.c:136:      timer_sleep (sleep_until - timer_ticks ());
+./tests/threads/mlfqs-load-avg.c:132:  start_time = timer_ticks ();
+./tests/threads/mlfqs-load-avg.c:148:      timer_sleep (sleep_until - timer_ticks ());
+./tests/threads/mlfqs-recent-1.c:107:   when timer_ticks() % TIMER_FREQ == 0. */
+./tests/threads/mlfqs-recent-1.c:120:      start_time = timer_ticks ();
+./tests/threads/mlfqs-recent-1.c:126:  start_time = timer_ticks ();
+./tests/threads/mlfqs.pm:25:sub mlfqs_expected_ticks {
+./tests/threads/mlfqs.pm:82:	my ($id, $count) = /Thread (\d+) received (\d+) ticks\./ or next;
+./tests/threads/mlfqs.pm:86:    my (@expected) = mlfqs_expected_ticks (@$nice);
+./tests/userprog/sc-bad-arg.c:1:/** Sticks a system call number (SYS_EXIT) at the very top of the
+./threads/bochsout.txt:65:00000000000i[KBD  ] will paste characters every 400 keyboard ticks
+Binary file ./threads/build/devices/timer.o matches
+./threads/build/kernel.asm:1461:    idle_ticks++;
+./threads/build/kernel.asm:1471:    user_ticks++;
+./threads/build/kernel.asm:1474:    kernel_ticks++;
+./threads/build/kernel.asm:1483:  if (++thread_ticks >= TIME_SLICE)
+./threads/build/kernel.asm:1509:  printf ("Thread: %lld idle ticks, %lld kernel ticks, %lld user ticks\n",
+./threads/build/kernel.asm:1526:          idle_ticks, kernel_ticks, user_ticks);
+./threads/build/kernel.asm:2441:  thread_ticks = 0;
+./threads/build/kernel.asm:7895:c0023dea <timer_ticks>:
+./threads/build/kernel.asm:7897:/** Returns the number of timer ticks since the OS booted. */
+./threads/build/kernel.asm:7899:timer_ticks (void) 
+./threads/build/kernel.asm:7907:  int64_t t = ticks;
+./threads/build/kernel.asm:7926:/** Returns the number of timer ticks elapsed since THEN, which
+./threads/build/kernel.asm:7927:   should be a value once returned by timer_ticks(). */
+./threads/build/kernel.asm:7938:  return timer_ticks () - then;
+./threads/build/kernel.asm:7939:c0023e31:	e8 b4 ff ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:7948:/** Sleeps for approximately TICKS timer ticks.  Interrupts must
+./threads/build/kernel.asm:7951:timer_sleep (int64_t ticks) 
+./threads/build/kernel.asm:7960:  int64_t start = timer_ticks ();
+./threads/build/kernel.asm:7961:c0023e50:	e8 95 ff ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:7976:  while (timer_elapsed (start) < ticks) 
+./threads/build/kernel.asm:7979:  while (timer_elapsed (start) < ticks) 
+./threads/build/kernel.asm:8075:   interrupts off for the interval between timer ticks or longer
+./threads/build/kernel.asm:8076:   will cause timer ticks to be lost.  Thus, use timer_msleep()
+./threads/build/kernel.asm:8101:   interrupts off for the interval between timer ticks or longer
+./threads/build/kernel.asm:8102:   will cause timer ticks to be lost.  Thus, use timer_usleep()
+./threads/build/kernel.asm:8127:   interrupts off for the interval between timer ticks or longer
+./threads/build/kernel.asm:8128:   will cause timer ticks to be lost.  Thus, use timer_nsleep()
+./threads/build/kernel.asm:8161:  printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
+./threads/build/kernel.asm:8162:c0023fb3:	e8 32 fe ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:8183:  ticks++;
+./threads/build/kernel.asm:8210:  int64_t start = ticks;
+./threads/build/kernel.asm:8215:  while (ticks == start)
+./threads/build/kernel.asm:8234:  start = ticks;
+./threads/build/kernel.asm:8250:  return start != ticks;
+./threads/build/kernel.asm:8325:     ---------------------- = NUM * TIMER_FREQ / DENOM ticks. 
+./threads/build/kernel.asm:8326:     1 s / TIMER_FREQ ticks
+./threads/build/kernel.asm:8328:  int64_t ticks = num * TIMER_FREQ / denom;
+./threads/build/kernel.asm:8361:  if (ticks > 0)
+./threads/build/kernel.asm:8372:      timer_sleep (ticks); 
+./threads/build/kernel.asm:23862:  msg ("Thread 0 sleeps 10 ticks each time,");
+./threads/build/kernel.asm:23867:  msg ("thread 1 sleeps 20 ticks each time, and so on.");
+./threads/build/kernel.asm:23915:  test.start = timer_ticks () + 100;
+./threads/build/kernel.asm:23916:c002bbd1:	e8 14 82 ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:24214:      timer_sleep (sleep_until - timer_ticks ());
+./threads/build/kernel.asm:24215:c002be6e:	e8 77 7f ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:24320:  msg ("Each thread sleeps 10 ticks each time.");
+./threads/build/kernel.asm:24353:  test.start = timer_ticks () + 100;
+./threads/build/kernel.asm:24354:c002bf97:	e8 4e 7e ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:24422:  msg ("iteration 0, thread 0: woke up after %d ticks", output[0]);
+./threads/build/kernel.asm:24433:    msg ("iteration %d, thread %d: woke up %d ticks later",
+./threads/build/kernel.asm:24446:    msg ("iteration %d, thread %d: woke up %d ticks later",
+./threads/build/kernel.asm:24525:      timer_sleep (sleep_until - timer_ticks ());
+./threads/build/kernel.asm:24526:c002c111:	e8 d4 7c ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:24538:      *test->output_pos++ = timer_ticks () - test->start;
+./threads/build/kernel.asm:24544:c002c140:	e8 a5 7c ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:24593:  wake_time = timer_ticks () + 5 * TIMER_FREQ;
+./threads/build/kernel.asm:24594:c002c19e:	e8 47 7c ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:24678:  int64_t start_time = timer_ticks ();
+./threads/build/kernel.asm:24679:c002c25c:	e8 89 7b ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:24706:  timer_sleep (wake_time - timer_ticks ());
+./threads/build/kernel.asm:24709:c002c29d:	e8 48 7b ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:27123:  start_time = timer_ticks ();
+./threads/build/kernel.asm:27124:c002d803:	e8 e2 65 ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:27323:  start_time = timer_ticks ();
+./threads/build/kernel.asm:27324:c002d9f2:	e8 f3 63 ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:27405:      timer_sleep (sleep_until - timer_ticks ());
+./threads/build/kernel.asm:27406:c002daca:	e8 1b 63 ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:27584:  start_time = timer_ticks ();
+./threads/build/kernel.asm:27585:c002dc6c:	e8 79 61 ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:27672:      timer_sleep (sleep_until - timer_ticks ());
+./threads/build/kernel.asm:27673:c002dd53:	e8 92 60 ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:27836:   when timer_ticks() % TIMER_FREQ == 0. */
+./threads/build/kernel.asm:27870:      start_time = timer_ticks ();
+./threads/build/kernel.asm:27871:c002df0c:	e8 d9 5e ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:27901:  start_time = timer_ticks ();
+./threads/build/kernel.asm:27902:c002df58:	e8 8d 5e ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:28186:  start_time = timer_ticks ();
+./threads/build/kernel.asm:28187:c002e1bf:	e8 26 5c ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:28251:  msg ("Starting threads took %"PRId64" ticks.", timer_elapsed (start_time));
+./threads/build/kernel.asm:28279:    msg ("Thread %d received %d ticks.", i, info[i].tick_count);
+./threads/build/kernel.asm:28359:      int64_t cur_time = timer_ticks ();
+./threads/build/kernel.asm:28360:c002e369:	e8 7c 5a ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:28479:  start_time = timer_ticks ();
+./threads/build/kernel.asm:28480:c002e47c:	e8 69 59 ff ff       	call   c0023dea <timer_ticks>
+./threads/build/kernel.asm:28540:  start_time = timer_ticks ();
+./threads/build/kernel.asm:28541:c002e4f8:	e8 ed 58 ff ff       	call   c0023dea <timer_ticks>
+Binary file ./threads/build/kernel.bin matches
+Binary file ./threads/build/kernel.o matches
+./threads/build/kernel.sym:372:c0023dea T timer_ticks
+./threads/build/kernel.sym:893:c0038228 b idle_ticks
+./threads/build/kernel.sym:894:c0038230 b kernel_ticks
+./threads/build/kernel.sym:895:c0038238 b user_ticks
+./threads/build/kernel.sym:896:c0038240 b thread_ticks
+./threads/build/kernel.sym:907:c00398a8 b ticks
+Binary file ./threads/build/tests/threads/alarm-priority.o matches
+Binary file ./threads/build/tests/threads/alarm-simultaneous.o matches
+Binary file ./threads/build/tests/threads/alarm-wait.o matches
+Binary file ./threads/build/tests/threads/mlfqs-block.o matches
+Binary file ./threads/build/tests/threads/mlfqs-fair.o matches
+Binary file ./threads/build/tests/threads/mlfqs-load-1.o matches
+Binary file ./threads/build/tests/threads/mlfqs-load-60.o matches
+Binary file ./threads/build/tests/threads/mlfqs-load-avg.o matches
+Binary file ./threads/build/tests/threads/mlfqs-recent-1.o matches
+Binary file ./threads/build/threads/thread.o matches
+./threads/thread.c:50:static long long idle_ticks;    /**< # of timer ticks spent idle. */
+./threads/thread.c:51:static long long kernel_ticks;  /**< # of timer ticks in kernel threads. */
+./threads/thread.c:52:static long long user_ticks;    /**< # of timer ticks in user programs. */
+./threads/thread.c:55:#define TIME_SLICE 4            /**< # of timer ticks to give each thread. */
+./threads/thread.c:56:static unsigned thread_ticks;   /**< # of timer ticks since last yield. */
+./threads/thread.c:130:    idle_ticks++;
+./threads/thread.c:133:    user_ticks++;
+./threads/thread.c:136:    kernel_ticks++;
+./threads/thread.c:139:  if (++thread_ticks >= TIME_SLICE)
+./threads/thread.c:147:  printf ("Thread: %lld idle ticks, %lld kernel ticks, %lld user ticks\n",
+./threads/thread.c:148:          idle_ticks, kernel_ticks, user_ticks);
+./threads/thread.c:527:  thread_ticks = 0;

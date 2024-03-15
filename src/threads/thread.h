@@ -4,6 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
+#include "threads/fixed-point.h"
 
 /** States in a thread's life cycle. */
 enum thread_status
@@ -88,7 +90,17 @@ struct thread
     char name[16];                      /**< Name (for debugging purposes). */
     uint8_t *stack;                     /**< Saved stack pointer. */
     int priority;                       /**< Priority. */
+    
+    /** For priority donation*/
+    int orig_priority;                  /**< Original priority. */
+    struct list holding_locks;                  /**< List of locks that the thread is holding. */
+    struct lock* waiting_lock;          /**< */ 
     int64_t wake_ticks;                 /**< sleep until wake_ticks*/
+    
+    /** For BSD scheduler*/
+    int nice;                           /**< nice value */
+    fixed_t recent_cpu;                 /**< recent cpu time */
+    
     struct list_elem allelem;           /**< List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -143,5 +155,17 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+void thread_update_priority(struct thread *t,void* aux);
+void thread_update_load_avg(void);
+void thread_update_recent_cpu(struct thread *t,void* aux);
+void thread_increment_recent_cpu(void);
+void thread_update_all_priority(void);
+void thread_update_all_recent_cpu(void);
+
+bool compare_priority_more(const struct list_elem* a,const struct list_elem* b,void* aux);
+bool compare_priority_less(const struct list_elem* a,const struct list_elem* b,void* aux);
+void thread_donate(struct thread *t);
+void thread_try_preempt(void);
 
 #endif /**< threads/thread.h */

@@ -504,6 +504,16 @@ list_max (struct list *list, list_less_func *less, void *aux)
   return max;
 }
 
+/** Remove the max element in LIST with largest value*/
+struct list_elem*
+list_pop_max(struct list *list, list_less_func *less, void *aux)
+{
+  struct list_elem *max = list_max(list, less, aux);
+  ASSERT(max != list_end(list));
+  list_remove(max);
+  return max;
+}
+
 /** Returns the element in LIST with the smallest value according
    to LESS given auxiliary data AUX.  If there is more than one
    minimum, returns the one that appears earlier in the list.  If

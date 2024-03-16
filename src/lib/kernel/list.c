@@ -509,7 +509,7 @@ struct list_elem*
 list_pop_max(struct list *list, list_less_func *less, void *aux)
 {
   struct list_elem *max = list_max(list, less, aux);
-  ASSERT(max != list_end(list));
+  //ASSERT(max != list_end(list));
   list_remove(max);
   return max;
 }

@@ -217,12 +217,8 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
-  //list_debug(&ready_list);
-
   /** check if preemption is needed*/
   thread_try_preempt();
-
-  //list_debug(&ready_list);
 
   return tid;
 }
@@ -273,20 +269,25 @@ thread_unblock (struct thread *t)
 /** called after thread_unblock, ready_list insert, read_list elem modified, thread_create*/
 void 
 thread_try_preempt(void){
-
-  //enum intr_level old_level=intr_disable();
-  if(!list_empty(&ready_list)){
+  /** running in external interrupt context and not need to disable again*/
+  if(intr_context()){
+    ASSERT(intr_get_level()==INTR_OFF);
     struct thread *t=list_entry(list_max(&ready_list,compare_priority_less,NULL),struct thread,elem);
     if(t->priority>thread_current()->priority){
-      if(intr_context()){
-        intr_yield_on_return();
-      }
-      else{
+      intr_yield_on_return();
+    }
+  }
+  /** need to disable interrupt becauce of access to read_list*/
+  else{
+    enum intr_level old_level=intr_disable();
+    if(!list_empty(&ready_list)){
+      struct thread *t=list_entry(list_max(&ready_list,compare_priority_less,NULL),struct thread,elem);
+      if(t->priority>thread_current()->priority){
         thread_yield();
       }
     }
+    intr_set_level(old_level);
   }
-  //intr_set_level(old_level);
 }
 
 /** Invoked by timer_sleep() in timer.c. Block the current thread until wake_ticks*/
@@ -298,6 +299,7 @@ thread_sleep(int64_t wake_ticks){
   }
   t->wake_ticks=wake_ticks;
   enum intr_level old_level=intr_disable();
+  
   list_insert_ordered(&sleep_list,&t->elem,compare_wake_ticks,NULL);
   thread_block();
 
@@ -452,7 +454,6 @@ thread_set_priority (int new_priority)
   //thread_current ()->priority = new_priority;
   if(thread_mlfqs)return;
 
-
   struct thread* t=thread_current();
 
   /** check the lock_holding list*/
@@ -512,6 +513,7 @@ thread_update_priority(struct thread *t,void* aux UNUSED){
 void
 thread_update_load_avg(void){
   int ready_threads=list_size(&ready_list);
+  
   if(thread_current()!=idle_thread){
     ready_threads++;
   }
@@ -595,7 +597,7 @@ kernel_thread (thread_func *function, void *aux)
   function (aux);       /**< Execute the thread function. */
   thread_exit ();       /**< If function() returns, kill the thread. */
 }
-
+
 /** Returns the running thread. */
 struct thread *
 running_thread (void) 
@@ -680,11 +682,16 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list))
+  ASSERT(intr_get_level()==INTR_OFF);
+  if (list_empty (&ready_list)){
     return idle_thread;
-  else
+  }
+  else{
     //return list_entry (list_pop_front (&ready_list), struct thread, elem);
-    return list_entry(list_pop_max(&ready_list,compare_priority_less,NULL),struct thread,elem);
+    struct thread* next = list_entry(list_pop_max(&ready_list,compare_priority_less,NULL),struct thread,elem);
+    return next;
+  }
+
 }
 
 /** Completes a thread switch by activating the new thread's page

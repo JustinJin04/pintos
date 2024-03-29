@@ -180,12 +180,13 @@ timer_interrupt (struct intr_frame *args UNUSED)
 
   if(thread_mlfqs){
     thread_increment_recent_cpu();
-    if(ticks % 4 == 0){
-      thread_update_all_priority();
+    if(ticks % 4 == 0 && ticks % TIMER_FREQ != 0){
+      thread_update_priority(thread_current(),NULL);
     }
-    if(ticks % TIMER_FREQ == 0){
+    else if(ticks % TIMER_FREQ == 0){
       thread_update_load_avg();
       thread_update_all_recent_cpu();
+      thread_update_all_priority();
     }
   }
   
@@ -193,6 +194,9 @@ timer_interrupt (struct intr_frame *args UNUSED)
   thread_wake();
   
   thread_tick ();
+
+  /** try preemption*/
+  thread_try_preempt();
 }
 
 /** Returns true if LOOPS iterations waits for more than one timer

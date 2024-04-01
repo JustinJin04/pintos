@@ -13,6 +13,7 @@
 #include "threads/vaddr.h"
 #include "../devices/timer.h"
 #include "threads/fixed-point.h"
+#include "malloc.h"
 
 #ifdef USERPROG
 #include "userprog/process.h"
@@ -114,6 +115,13 @@ thread_init (void)
   if(thread_mlfqs){
     load_avg=CONVERT_TO_FIXED(0);
   }
+
+#ifdef USERPROG
+  list_init(&initial_thread->children);
+  initial_thread->parent=NULL;
+  initial_thread->exec_file=NULL;
+  initial_thread->pcb=NULL;
+#endif
 }
 
 /** Starts preemptive thread scheduling by enabling interrupts.
@@ -213,6 +221,29 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
   sf->ebp = 0;
+
+#ifdef USERPROG
+  list_init(&t->children);
+  t->parent=thread_current();
+  t->descriptor_table=calloc(sizeof(struct file*),128);
+  if(t->descriptor_table==NULL){
+    palloc_free_page(t);
+    return TID_ERROR;
+  }
+  t->next_fd=2;
+  t->exec_file=NULL;
+  // t->pcb=malloc(sizeof(struct process_control_block));
+  // if(t->pcb==NULL){
+  //   palloc_free_page(t);
+  //   return TID_ERROR;
+  // }
+  //t->pcb->pid=t->tid;
+  // t->pcb->has_exited=false;
+  // t->pcb->is_orphan=false;
+  // t->pcb->exit_status=0;
+  // sema_init(&t->pcb->sema_wait,0);
+  //list_push_back(&thread_current()->children,&t->pcb->elem);
+#endif
 
   /* Add to run queue. */
   thread_unblock (t);
@@ -367,6 +398,13 @@ thread_exit (void)
 #ifdef USERPROG
   process_exit ();
 #endif
+
+  /** release holding locks*/
+  struct thread* cur=thread_current();
+  while(!list_empty(&cur->holding_locks)){
+    struct lock* l=list_entry(list_pop_front(&cur->holding_locks),struct lock,elem);
+    lock_release(l);
+  }
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us

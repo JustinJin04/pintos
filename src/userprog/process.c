@@ -17,9 +17,13 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static void pushing_args(void **esp,char* file_name);
+
+#define MAXARGC 30
 
 /** Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -30,6 +34,7 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
+  struct thread* cur=thread_current();
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -38,33 +43,79 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  char first_cmd[20];
+  strlcpy(first_cmd,fn_copy,strchr(fn_copy,' ')-fn_copy+1);
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+  sema_init(&cur->load_sema,0);
+  cur->load_success=false;
+  
+  /* initialized child pcb and pass to start_process*/
+  struct process_control_block* child_pcb=palloc_get_page(0);
+  if(child_pcb==NULL){
+    return TID_ERROR;
+  }
+  
+  strlcpy(child_pcb->cmd_line,fn_copy,strlen(fn_copy)+1);
+  child_pcb->has_exited=false;
+  child_pcb->is_orphan=false;
+  child_pcb->exit_status=0;
+  sema_init(&child_pcb->sema_wait,0);
+
+  tid = thread_create (first_cmd, PRI_DEFAULT, start_process, child_pcb);
+
+  palloc_free_page (fn_copy);
+  if (tid == TID_ERROR){
+    return TID_ERROR;
+  }
+  
+  sema_down(&cur->load_sema);
+  if(!cur->load_success){
+    palloc_free_page(child_pcb);
+    return TID_ERROR;
+  }
+  list_push_back(&cur->children,&child_pcb->elem);
+
   return tid;
 }
 
 /** A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
-{
-  char *file_name = file_name_;
+start_process (void *child_pcb_)
+{ 
+  // char *file_name = child_pcb->cmd_line;
   struct intr_frame if_;
   bool success;
+  struct thread* cur=thread_current();
+
+  cur->pcb=(struct process_control_block*)child_pcb_;
+  char* file_name=cur->pcb->cmd_line;
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (thread_current()->name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
-  if (!success) 
+  //palloc_free_page (file_name);
+  if (!success) {
+    cur->parent->load_success=false;
+    sema_up(&cur->parent->load_sema);
+
+    cur->pcb->exit_status=-1;
     thread_exit ();
+  }
+
+  /** load success*/
+  cur->pcb->pid=cur->tid;
+  /** passing the arguments*/
+  pushing_args(&if_.esp,file_name);
+  
+  cur->parent->load_success=true;
+  sema_up(&cur->parent->load_sema);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -74,6 +125,42 @@ start_process (void *file_name_)
      and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
+}
+
+/** pushing the arguments on the esp*/
+static void
+pushing_args(void **esp,char* file_name){
+  int argc=0;
+  char* token,*save_ptr;
+  char* token_address[MAXARGC];
+  /** push argv strings on the stack*/
+  for(token=strtok_r(file_name," ",&save_ptr);token!=NULL;token=strtok_r(NULL," ",&save_ptr)){
+    int len=strlen(token);
+    *esp-=len+1;
+    strlcpy(*esp,token,len+1);
+    token_address[argc++]=*esp;
+  }
+  ASSERT(argc<=MAXARGC);
+  /** align the esp*/
+  *esp=(void*)((size_t)*esp&~0x3);
+  /** argv[argc]=0*/
+  *esp-=sizeof(size_t);
+  *(size_t*)*esp=0;
+  /** push the argv pointers*/
+  for(int i=argc-1;i>=0;--i){
+    *esp-=sizeof(size_t);
+    *(size_t*)*esp=(size_t)token_address[i];
+  }
+  /** push the argv address*/
+  *esp-=sizeof(size_t);
+  *(size_t*)*esp=(size_t)*esp+sizeof(size_t);
+
+  /** push the argc*/
+  *esp-=sizeof(int);
+  *(int*)*esp=argc;
+  /** push the return address (0)*/
+  *esp-=sizeof(size_t);
+  *(size_t*)*esp=0;
 }
 
 /** Waits for thread TID to die and returns its exit status.  If
@@ -88,7 +175,24 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  return -1;
+  struct thread* cur=thread_current();
+  struct process_control_block* child_pcb=NULL;
+  struct list_elem* e;
+  for(e=list_begin(&cur->children);e!=list_end(&cur->children);e=list_next(e)){
+    child_pcb=list_entry(e,struct process_control_block,elem);
+    if(child_pcb->pid==child_tid){
+      break;
+    }
+  }
+  /* could not find child_tid*/
+  if(child_pcb==NULL){
+    return -1;
+  }
+  sema_down(&child_pcb->sema_wait);
+  int exit_code=child_pcb->exit_status;
+  list_remove(&child_pcb->elem);
+  palloc_free_page(child_pcb);
+  return exit_code;
 }
 
 /** Free the current process's resources. */
@@ -97,6 +201,41 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+  /** close open file and release descriptor table*/
+  for(int i=2;i<cur->next_fd;++i){
+    if(cur->descriptor_table[i]!=NULL){
+      file_close(cur->descriptor_table[i]);
+    }
+  }
+  free(cur->descriptor_table);
+
+  /* allow write on exec_file*/
+  if(cur->exec_file!=NULL){
+    file_allow_write(cur->exec_file);
+    file_close(cur->exec_file);
+  }
+  
+  /** empty children pcb list. If children has exited, free. Else set as orphan*/
+  while(!list_empty(&cur->children)){
+    struct process_control_block* child_pcb=list_entry(list_pop_front(&cur->children),struct process_control_block,elem);
+    if(child_pcb->has_exited){
+      palloc_free_page(child_pcb);
+    }
+    else{
+      child_pcb->is_orphan=true;
+    }
+  }
+  /** free pcb if is orphan. Else, */
+  if(cur->pcb!=NULL){
+    if(cur->pcb->is_orphan){
+      palloc_free_page(cur->pcb);
+    }
+    else{
+      cur->pcb->has_exited=true;
+      sema_up(&cur->pcb->sema_wait);
+    }
+  }
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -308,11 +447,15 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
 
+  /* initialized exec_file and deny writing on it*/
+  file_deny_write(file);
+  t->exec_file=file;
+
   success = true;
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  //file_close (file);
   return success;
 }
 

@@ -111,6 +111,24 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /**< Page directory. */
+    
+    /* initialized when process was created
+       except for inital_thread*/
+    struct list children;               /**< List of children. */
+    struct thread* parent;              /**< Parent thread. */
+    struct file** descriptor_table;
+    int next_fd;
+    struct file* exec_file;            /**< current executable file. */
+    
+    struct process_control_block* pcb;  /**< Process control block. */
+    
+    /* initialized in process_exec*/
+    struct semaphore load_sema;         /**< Semaphore for loading. */
+    bool load_success;                  /**< Load success. */
+    
+
+
+
 #endif
 
     /* Owned by thread.c. */

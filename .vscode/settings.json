@@ -1,0 +1,14 @@
+{
+    "files.associations": {
+        "inttypes.h": "c",
+        "syscall.h": "c",
+        "synch.h": "c",
+        "exception.h": "c",
+        "file.h": "c",
+        "input.h": "c",
+        "algorithm": "c",
+        "thread.h": "c",
+        "vaddr.h": "c",
+        "off_t.h": "c"
+    }
+}

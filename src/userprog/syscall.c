@@ -16,6 +16,8 @@ static void syscall_handler (struct intr_frame *);
 #define CMD_LINE_MAX 512
 #define FD_MAX 128
 
+#define MAX(a,b) ((a)>(b)?(a):(b))
+
 /** lock for filesys*/
 struct lock filesys_lock;
 
@@ -35,21 +37,18 @@ static unsigned sys_tell (int fd);
 static void sys_close(int fd);
 
 /** utils functions*/
-
 static int get_user (const uint8_t *uaddr);
 static bool put_user (uint8_t *udst, uint8_t byte);
 static void read_user(void* kaddr_,const void* uaddr_,int n);
-// static void write_user(void* uaddr_,const void* kaddr_,int n);
-static void proc_terminate(void);
 
 static inline void
 check_user_ptr(const void* uaddr){
   if(uaddr>=PHYS_BASE||uaddr==NULL){
-    proc_terminate();
+    sys_exit(-1);
   }
   int result=get_user(uaddr);
   if(result==-1){
-    proc_terminate();
+    sys_exit(-1);
   }
 }
 
@@ -58,18 +57,27 @@ check_user_string(const char* str,int maxlen){
   for(int i=0;i<maxlen;++i){
     int result=get_user((const uint8_t*)str+i);
     if(result==-1){
-      proc_terminate();
+      sys_exit(-1);
     }
     char c=result&0xff;
     if(c=='\0'){
       return;
     }
   }
-  proc_terminate();
+  sys_exit(-1);
 }
 
-
-#define MAX(a,b) ((a)>(b)?(a):(b))
+static inline void
+check_user_address(const void* uaddr,int len){
+  if(len<0){
+    sys_exit(-1);
+  }
+  void* start_page_addr=pg_round_down(uaddr);
+  void* end_page_addr=pg_round_down(uaddr+len-1);
+  for(void* addr=start_page_addr;addr<=end_page_addr;addr+=PGSIZE){
+    check_user_ptr(addr);
+  }
+}
 
 
 void
@@ -88,7 +96,7 @@ syscall_handler (struct intr_frame *f){
   u_ptr+=sizeof(int);
   
   switch (syscall_num){
-    
+
     case SYS_HALT:
     {
       sys_halt();
@@ -216,13 +224,12 @@ syscall_handler (struct intr_frame *f){
       sys_close(fd);
       break;
     }
-
+    default:
+    {
+      printf("system call %d is not implemented!\n",syscall_num);
+      sys_exit(-1);
+    }
   }
-
-
-
-  //printf ("system call!\n");
-  // thread_exit ();
 }
 
 /******************* implementation of syscall functions****************/
@@ -274,6 +281,7 @@ sys_create(const char* file,unsigned initial_size){
 static bool
 sys_remove(const char* file){
   check_user_string(file,FILE_NAME_MAX);
+  // check_user_address(file,strlen(file)+1);
   
   lock_acquire(&filesys_lock);
   bool success = filesys_remove(file);
@@ -284,6 +292,7 @@ sys_remove(const char* file){
 static int
 sys_open (const char *file_name){
   check_user_string(file_name,FILE_NAME_MAX);
+  // check_user_address(file_name,strlen(file_name)+1);
   struct thread* cur=thread_current();
   
   lock_acquire(&filesys_lock);
@@ -294,7 +303,7 @@ sys_open (const char *file_name){
     return -1;
   }
   int next_fd=cur->next_fd;
-  for(int fd=2;fd<=MAX(next_fd,FD_MAX);++fd){
+  for(int fd=2;fd<=FD_MAX;++fd){
     if(cur->descriptor_table[fd]==NULL){
       cur->descriptor_table[fd]=file;
       cur->next_fd=MAX(next_fd,fd+1);
@@ -309,12 +318,12 @@ sys_open (const char *file_name){
 static int
 sys_filesize(int fd){
   if(fd<0||fd>=FD_MAX){
-    proc_terminate();
+    sys_exit(-1);
   }
 
   struct file* file=thread_current()->descriptor_table[fd];
   if(file==NULL){
-    proc_terminate();
+    sys_exit(-1);
   }
   lock_acquire(&filesys_lock);
   int ret = file_length(file);
@@ -325,9 +334,9 @@ sys_filesize(int fd){
 static int
 sys_read(int fd,void* buffer,unsigned size_){
   if(fd<0||fd>=FD_MAX){
-    proc_terminate();
+    sys_exit(-1);
   }
-  check_user_ptr(buffer);
+  check_user_address(buffer,size_);
   
   int size;
   lock_acquire(&filesys_lock);
@@ -336,7 +345,7 @@ sys_read(int fd,void* buffer,unsigned size_){
       int result=put_user(buffer+i,input_getc());
       if(!result){
         lock_release(&filesys_lock);
-        proc_terminate();
+        sys_exit(-1);
       }
     }
     lock_release(&filesys_lock);
@@ -357,9 +366,10 @@ sys_read(int fd,void* buffer,unsigned size_){
 static int
 sys_write(int fd,const void* buffer,unsigned size){
   if(fd<0||fd>=FD_MAX){
-    proc_terminate();
+    sys_exit(-1);
   }
-  check_user_ptr(buffer);
+  // check_user_ptr(buffer);
+  check_user_address(buffer,size);
   
   lock_acquire(&filesys_lock);
 
@@ -384,7 +394,7 @@ sys_write(int fd,const void* buffer,unsigned size){
 static void
 sys_seek(int fd,unsigned pos){
   if(fd<0||fd>=FD_MAX){
-    proc_terminate();
+    sys_exit(-1);
   }
   
   struct file* file=thread_current()->descriptor_table[fd];
@@ -399,7 +409,7 @@ sys_seek(int fd,unsigned pos){
 static unsigned
 sys_tell(int fd){
   if(fd<0||fd>=FD_MAX){
-    proc_terminate();
+    sys_exit(-1);
   }
   
   struct file* file=thread_current()->descriptor_table[fd];
@@ -415,7 +425,7 @@ sys_tell(int fd){
 static void
 sys_close(int fd){
   if(fd<0||fd>=FD_MAX){
-    proc_terminate();
+    sys_exit(-1);
   }
   
   struct file* file=thread_current()->descriptor_table[fd];
@@ -465,44 +475,16 @@ read_user(void* kaddr_,const void* uaddr_,int n){
   const uint8_t *uaddr=uaddr_;
 
   for(int i=0;i<n;++i){
-    check_user_ptr(uaddr);
+    if((void* )uaddr>=PHYS_BASE||uaddr==NULL){
+      sys_exit(-1);
+    }
     int result=get_user(uaddr);
     if(result==-1){
-      proc_terminate();
+      sys_exit(-1);
     }
+
     *kaddr=result&0xff;
     kaddr++;
     uaddr++;
   }
-}
-
-/** write n bytes from kaddr_ to uaddr
- * If invalid address, go to proc_terminate
-*/
-// static void write_user(void* uaddr_,const void* kaddr_,int n){
-//   ASSERT(n>0);
-//   uint8_t *uaddr = uaddr_;
-//   const uint8_t *kaddr=kaddr_;
-
-//   for(int i=0;i<n;++i){
-//     if(uaddr>=PHYS_BASE){
-//       // printf("uaddr=%p\n",uaddr);
-//       proc_terminate();
-//     }
-//     if(!put_user(uaddr,*kaddr)){
-//       // printf("write_user: put_user failed\n");
-//       proc_terminate();
-//     }
-//     uaddr++;
-//     kaddr++;
-//   }
-// }
-
-/** terminating the process and free its locks and pages
- * TODO: malloc
- * 
-*/
-static void
-proc_terminate(){
-  sys_exit(-1);
 }

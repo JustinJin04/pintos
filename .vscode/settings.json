@@ -9,6 +9,15 @@
         "algorithm": "c",
         "thread.h": "c",
         "vaddr.h": "c",
-        "off_t.h": "c"
+        "off_t.h": "c",
+        "string.h": "c",
+        "pagedir.h": "c",
+        "*.inc": "c",
+        "atomic": "c",
+        "*.tcc": "c",
+        "fstream": "c",
+        "sstream": "c",
+        "main.h": "c",
+        "lib.h": "c"
     }
 }

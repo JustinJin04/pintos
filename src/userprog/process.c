@@ -100,7 +100,6 @@ start_process (void *child_pcb_)
   success = load (thread_current()->name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  //palloc_free_page (file_name);
   if (!success) {
     cur->parent->load_success=false;
     sema_up(&cur->parent->load_sema);

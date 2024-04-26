@@ -8,12 +8,13 @@ int process_wait (tid_t);
 void process_exit (void);
 void process_activate (void);
 
+/** do not release until the process was retrieved by the parent process*/
 struct process_control_block{
     /** initialized in thread_create*/
     tid_t pid;
 
     /** initialized in process_exec*/
-    char cmd_line[100];
+    char cmd_line[128];
     bool has_exited;
     bool is_orphan;
     struct semaphore sema_wait; /* used for sys_wait*/

@@ -7,6 +7,9 @@
 #include "threads/synch.h"
 #include "threads/fixed-point.h"
 
+#ifdef VM
+#include <hash.h>
+
 /** States in a thread's life cycle. */
 enum thread_status
   {
@@ -126,9 +129,11 @@ struct thread
     struct semaphore load_sema;         /**< Semaphore for loading. */
     bool load_success;                  /**< Load success. */
     
+#endif
 
-
-
+#ifdef VM
+      struct hash* spage_table;            /**< Supplemental page table. */
+      void* user_esp;                          /**< User's Stack pointer. */
 #endif
 
     /* Owned by thread.c. */
@@ -188,3 +193,5 @@ void thread_donate(struct thread *t);
 void thread_try_preempt(void);
 
 #endif /**< threads/thread.h */
+
+#endif

@@ -18,6 +18,16 @@
         "fstream": "c",
         "sstream": "c",
         "main.h": "c",
-        "lib.h": "c"
+        "lib.h": "c",
+        "stddef.h": "c",
+        "stdbool.h": "c",
+        "palloc.h": "c",
+        "hash.h": "c",
+        "string_view": "c",
+        "system_error": "c",
+        "block.h": "c",
+        "bitmap.h": "c",
+        "swap.h": "c",
+        "stdlib.h": "c"
     }
 }

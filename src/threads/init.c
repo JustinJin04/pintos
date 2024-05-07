@@ -31,12 +31,18 @@
 #else
 #include "tests/threads/tests.h"
 #endif
+#ifdef VM
+#include "vm/frame.h"
+#include "vm/swap.h"
+#endif
 #ifdef FILESYS
 #include "devices/block.h"
 #include "devices/ide.h"
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
 #endif
+
+#include"lib/random.h"
 
 /** Page directory with kernel mappings only. */
 uint32_t *init_page_dir;
@@ -105,6 +111,10 @@ pintos_init (void)
   gdt_init ();
 #endif
 
+#ifdef VM
+  frame_init();
+#endif
+
   /* Initialize interrupt handlers. */
   intr_init ();
   timer_init ();
@@ -125,6 +135,11 @@ pintos_init (void)
   ide_init ();
   locate_block_devices ();
   filesys_init (format_filesys);
+#endif
+
+#ifdef VM
+  swap_init();
+  random_init(0);
 #endif
 
   printf ("Boot complete.\n");

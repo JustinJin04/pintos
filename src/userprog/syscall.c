@@ -9,6 +9,8 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "devices/input.h"
+#include "vm/spage.h"
+#include "vm/frame.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -35,6 +37,9 @@ static int sys_read(int fd,void* buffer,unsigned size);
 static void sys_seek (int fd, unsigned position);
 static unsigned sys_tell (int fd);
 static void sys_close(int fd);
+
+static void preload_pages(void* buffer, unsigned size);
+static void unpin_pages(void* buffer, unsigned size);
 
 /** utils functions*/
 static int get_user (const uint8_t *uaddr);
@@ -79,6 +84,20 @@ check_user_address(const void* uaddr,int len){
   }
 }
 
+static inline void
+check_user_address_debug(const void* uaddr,int len){
+  if(len<0){
+    sys_exit(-1);
+  }
+  void* start_page_addr=pg_round_down(uaddr);
+  void* end_page_addr=pg_round_down(uaddr+len-1);
+  for(void* addr=start_page_addr;addr<=end_page_addr;addr+=PGSIZE){
+    //printf("start check addr:%p\n",addr);
+    check_user_ptr(addr);
+    //printf("check addr success:%p\n",addr);
+  }
+}
+
 
 void
 syscall_init (void){
@@ -90,6 +109,7 @@ static void
 syscall_handler (struct intr_frame *f){
 
   void* u_ptr=f->esp;
+  thread_current()->user_esp=f->esp;
   
   int syscall_num;
   read_user(&syscall_num,u_ptr,sizeof(int));
@@ -248,7 +268,9 @@ sys_exit(int code_){
   }
   //when the thread_exit is done, all the lock acquired by the thread will be released
   //Thus no need for releasing the lock here
-  lock_acquire(&filesys_lock);
+  if(!lock_held_by_current_thread(&filesys_lock)){
+    lock_acquire(&filesys_lock);
+  }
   thread_exit();
   NOT_REACHED();
 }
@@ -337,7 +359,8 @@ sys_read(int fd,void* buffer,unsigned size_){
     sys_exit(-1);
   }
   check_user_address(buffer,size_);
-  
+  //check_user_address_debug(buffer,size_);
+
   int size;
   lock_acquire(&filesys_lock);
   if(fd==0){
@@ -357,27 +380,35 @@ sys_read(int fd,void* buffer,unsigned size_){
       lock_release(&filesys_lock);
       return -1;
     }
+#ifdef VM
+    preload_pages(buffer, size_);
+#endif
     size=file_read(file,buffer,size_);
+#ifdef VM
+    unpin_pages(buffer, size_);
+#endif
+
     lock_release(&filesys_lock);
     return size;
   }
 }
 
 static int
-sys_write(int fd,const void* buffer,unsigned size){
+sys_write(int fd,const void* buffer,unsigned size_){
   if(fd<0||fd>=FD_MAX){
     sys_exit(-1);
   }
   // check_user_ptr(buffer);
-  check_user_address(buffer,size);
+  check_user_address_debug(buffer,size_);
   
   lock_acquire(&filesys_lock);
 
+  int size;
   /** write to stdout*/
   if(fd==1){
-    putbuf(buffer,size);
+    putbuf(buffer,size_);
     lock_release(&filesys_lock);
-    return size;
+    return size_;
   }
   else{
     struct file* file=thread_current()->descriptor_table[fd];
@@ -385,9 +416,16 @@ sys_write(int fd,const void* buffer,unsigned size){
       lock_release(&filesys_lock);
       return -1;
     }
-    int ret = file_write(file,buffer,size);
+#ifdef VM
+    preload_pages(buffer, size_);
+#endif
+    int size = file_write(file,buffer,size_);
+#ifdef VM
+    unpin_pages(buffer, size_);
+#endif
+
     lock_release(&filesys_lock);
-    return ret;
+    return size;
   }
 }
 
@@ -437,6 +475,29 @@ sys_close(int fd){
   lock_release(&filesys_lock);
   thread_current()->descriptor_table[fd]=NULL;
 }
+
+static void
+preload_pages(void* buffer, unsigned size){
+  void* start_page_addr = pg_round_down(buffer);
+  void* end_page_addr = pg_round_down(buffer + size - 1);
+  for(void* addr = start_page_addr; addr <= end_page_addr; addr += PGSIZE){
+    struct spage_table_entry* se = spage_find(thread_current(),addr);
+    //spage_load(se);
+    ASSERT(spage_load(se) == true);
+    frame_pin(se->kpage);
+  }
+}
+
+static void
+unpin_pages(void* buffer, unsigned size){
+  void* start_page_addr = pg_round_down(buffer);
+  void* end_page_addr = pg_round_down(buffer + size - 1);
+  for(void* addr = start_page_addr; addr <= end_page_addr; addr += PGSIZE){
+    struct spage_table_entry* se = spage_find(thread_current(),addr);
+    frame_unpin(se->kpage);
+  }
+}
+
 
 /******************** utils functions*************************/
 

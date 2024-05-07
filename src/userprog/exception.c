@@ -5,6 +5,16 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "userprog/syscall.h"
+#include "threads/vaddr.h"
+#include "vm/frame.h"
+#include "vm/spage.h"
+
+#define MAX_STACK_SIZE (1<<23)
+
+// void pagefault_debug(void* fault_addr){
+//    printf("fault_addr : %p\n", fault_addr);
+//    ASSERT(0);
+// }
 
 /** Number of page faults processed. */
 static long long page_fault_cnt;
@@ -154,15 +164,55 @@ page_fault (struct intr_frame *f)
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
      which fault_addr refers. */
+
+#ifdef VM
+   void* fault_page = pg_round_down(fault_addr);
+   struct spage_table_entry* se = spage_find(thread_current(),fault_page);
    
+   /* If the page fault was invoked by syscall, then the user_esp is not stored in f->esp*/
+   void* user_esp = user ? f->esp : thread_current()->user_esp;
+
+   /* user invoke page fault*/
+   if(not_present){
+      if(se == NULL){
+         /* stack growth*/
+         if(PHYS_BASE > fault_addr && (fault_addr >= user_esp || user_esp - fault_addr <= 32) && PHYS_BASE-MAX_STACK_SIZE <= fault_addr){
+            // void* kpage = frame_allocate(PAL_USER|PAL_ZERO, fault_page);
+            // ASSERT(kpage != NULL);
+            // pagedir_set_page(thread_current()->pagedir,fault_page, kpage, true);
+            // spage_install_frame(fault_page, kpage, true);
+            spage_install_zero(fault_page, true);
+            return;
+         }
+         else{
+            //pagefault_debug(fault_addr);
+            goto FAULTROUTINE;
+            //ASSERT(false);
+         }
+      }
+      /* file, swap, zero*/
+      else{
+         //ASSERT(se->status != IN_FRAME);
+         ASSERT(spage_load(se)==true);
+         return;
+      }
+   }
+   // r/o rights fault
+   else{
+      //ASSERT(0);
+      goto FAULTROUTINE;
+   }
+
+#endif
+
+FAULTROUTINE:
+
    /** page fault made by the sys_call*/
    if(user==0){
       f->eip = (void (*) (void)) f->eax;
       f->eax = -1;
       return;
    }
-
-
 
   printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
@@ -171,4 +221,3 @@ page_fault (struct intr_frame *f)
           user ? "user" : "kernel");
   kill (f);
 }
-

@@ -22,7 +22,7 @@ test_main (void)
   CHECK ((handle = open ("sample.txt")) > 1, "open \"sample.txt\"");
   CHECK ((map = mmap (handle, ACTUAL)) != MAP_FAILED, "mmap \"sample.txt\"");
   memcpy (ACTUAL, sample, strlen (sample));
-  munmap (map);
+  munmap (map); 
 
   /* Read back via read(). */
   read (handle, buf, strlen (sample));

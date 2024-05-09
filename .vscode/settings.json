@@ -28,6 +28,14 @@
         "block.h": "c",
         "bitmap.h": "c",
         "swap.h": "c",
-        "stdlib.h": "c"
+        "stdlib.h": "c",
+        "mmap.h": "c",
+        "process.h": "c",
+        "spage.h": "c",
+        "filesys.h": "c",
+        "shutdown.h": "c",
+        "frame.h": "c",
+        "cstdlib": "c",
+        "memory": "c"
     }
 }

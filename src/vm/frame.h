@@ -12,13 +12,16 @@ struct frame_table_entry{
 
     bool pin;
 
-    struct hash_elem frame_elem;    /* embed into frame*/
+    struct hash_elem frame_hash_elem;    /* embed into hash*/
+
+    struct list_elem frame_list_elem;    /* embed into list*/
 };
 
 void frame_init(void);
 void* frame_allocate(enum palloc_flags flags, void* upage);
-void frame_free (struct frame_table_entry* fe);
-void frame_remove(void* kpage);
-
+void frame_free (void* kpage, bool keep_holding_lock);
+//void frame_remove(void* kpage, bool keep_holding_lock);
 void frame_pin(void* kpage);
 void frame_unpin(void* kpage);
+
+void frame_debug(void);

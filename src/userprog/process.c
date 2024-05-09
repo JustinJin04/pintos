@@ -20,6 +20,7 @@
 #include "threads/malloc.h"
 #include "vm/frame.h"
 #include "vm/spage.h"
+#include "vm/mmap.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -203,6 +204,12 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+//   /** destroy the spage_table along with frame allocated previous*/
+// #ifdef VM
+//   mmap_destroy();
+//   spage_destroy();
+// #endif
+
   /** close open file and release descriptor table*/
   for(int i=2;i<cur->next_fd;++i){
     if(cur->descriptor_table[i]!=NULL){
@@ -238,10 +245,11 @@ process_exit (void)
     }
   }
 
-  /** destroy the spage_table along with frame allocated previous*/
-#ifdef VM
-  spage_destroy();
-#endif
+//   /** destroy the spage_table along with frame allocated previous*/
+// #ifdef VM
+//   mmap_destroy();
+//   spage_destroy();
+// #endif
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -366,6 +374,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* initialize spage table*/
   #ifdef VM
   spage_init();
+  mmap_init();
   #endif
 
   if (t->pagedir == NULL) 
@@ -576,7 +585,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         }
 #else
       spage_install_file(upage,file,ofs,page_read_bytes,page_zero_bytes,writable);
-      //printf("process tid=%d, upage=%p, ofs=%d, read_bytes=%d, zero_bytes=%d, writable=%d\n",thread_current()->tid,upage,ofs,page_read_bytes,page_zero_bytes,writable);
       ofs+=PGSIZE;
 #endif
 
@@ -593,10 +601,10 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp) 
 {
+#ifndef VM
   uint8_t *kpage;
   bool success = false;
-
-#ifndef VM
+  
   kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   //kpage = frame_allocate(PAL_USER|PAL_ZERO,((uint8_t *) PHYS_BASE) - PGSIZE);
   if (kpage != NULL) 
@@ -633,12 +641,6 @@ install_page (void *upage, void *kpage, bool writable)
 
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
-  // return (pagedir_get_page (t->pagedir, upage) == NULL
-  //         && pagedir_set_page (t->pagedir, upage, kpage, writable));
-  bool success=(pagedir_get_page (t->pagedir, upage) == NULL && pagedir_set_page (t->pagedir, upage, kpage, writable));
-  if(!success)return false;
-#ifdef VM
-  spage_install_frame(upage,kpage,writable);
-#endif
-  return success;
+  return (pagedir_get_page (t->pagedir, upage) == NULL
+          && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }

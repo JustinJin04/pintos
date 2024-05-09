@@ -5,12 +5,15 @@
 #include"threads/vaddr.h"
 #include"userprog/pagedir.h"
 #include"vm/frame.h"
-//#include"vm/swap.h"
-//#include"vm/swap.h"
+#include"userprog/syscall.h"
+#include "threads/malloc.h"
+#include "string.h"
+#include "vm/swap.h"
+#include "filesys/file.h"
 
-static unsigned spage_hash_func(const struct hash_elem *e, void *aux);
-static bool spage_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux);
-static void spage_destroy_func(struct hash_elem *e, void *aux);
+static unsigned spage_hash_func(const struct hash_elem *e, void *aux UNUSED);
+static bool spage_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED);
+static void spage_destroy_func(struct hash_elem *e, void *aux UNUSED);
 
 void
 spage_init(){
@@ -22,10 +25,12 @@ spage_init(){
 /** insert a spage table entry pointed to a file*/
 void
 spage_install_file(void* upage, struct file* file, off_t offset, size_t read_bytes, size_t zero_bytes, bool writable){
-    //ASSERT(spage_find(upage) == NULL);
+    
     struct spage_table_entry* se = (struct spage_table_entry*)malloc(sizeof(struct spage_table_entry));
+    ASSERT(se != NULL);
+    
+    /* initialize spage entry*/
     se->upage = upage;
-    //se->status = IN_FILESYS;
     se->location = IN_FILESYS;
     se->type = REGU;
     se->file = file;
@@ -33,33 +38,51 @@ spage_install_file(void* upage, struct file* file, off_t offset, size_t read_byt
     se->read_bytes = read_bytes;
     se->zero_bytes = zero_bytes;
     se->writable = writable;
-    struct thread* cur = thread_current();
-    hash_insert(cur->spage_table, &se->spage_elem);
+
+    /* insert into spage table*/
+    hash_insert(thread_current()->spage_table, &se->spage_elem);
 }
 
-/** install a page that's already on the frame*/
-void
-spage_install_frame(void* upage, void* kpage,bool writable){
-    //ASSERT(spage_find(upage) == NULL);
+/** install MMap region*/
+bool
+spage_install_mmap(void* upage, struct file* file, off_t offset, size_t read_bytes, size_t zero_bytes, bool writable){
+
     struct spage_table_entry* se = (struct spage_table_entry*)malloc(sizeof(struct spage_table_entry));
+    ASSERT(se != NULL);
+
+    /* initialize spage entry*/
     se->upage = upage;
-    se->kpage = kpage;
-    //se->status = IN_FRAME;
+    se->location = IN_FILESYS;
+    se->type = MMAP;
+    se->file = file;
+    se->offset = offset;
+    se->read_bytes = read_bytes;
+    se->zero_bytes = zero_bytes;
     se->writable = writable;
+    
     struct thread* cur = thread_current();
+    /* already mapped*/
+    if(hash_find(cur->spage_table,&se->spage_elem)){
+        ASSERT(0);
+        return false;
+    }
     hash_insert(cur->spage_table, &se->spage_elem);
+    return true;
 }
 
 /** install a page that is filled with 0*/
 void
 spage_install_zero(void* upage,bool writable){
-    //ASSERT(spage_find(upage) == NULL);
     struct spage_table_entry* se = (struct spage_table_entry*)malloc(sizeof(struct spage_table_entry));
+    ASSERT(se != NULL);
+    
+    /* initialize spage entry*/
     se->upage = upage;
-    //se->status = IN_ZERO;
     se->location = IN_FILESYS;
     se->type = ANON;
     se->writable = writable;
+
+    /* insert into spage table*/
     struct thread* cur = thread_current();
     hash_insert(cur->spage_table, &se->spage_elem);
 }
@@ -68,54 +91,58 @@ spage_install_zero(void* upage,bool writable){
 bool 
 spage_load(struct spage_table_entry* se){
     ASSERT(se != NULL);
-    if(se->location == IN_FRAME){
-        return true;
-    }
-    // if(pagedir_get_page(thread_current()->pagedir,se->upage)){
-    //     return true;
-    // }
-
+    ASSERT(se->location != IN_FRAME);
+    
     se->kpage = frame_allocate(PAL_USER, se->upage);
-    ASSERT(se->kpage != NULL);
-
-        //se->status = IN_FRAME;
-    if(pagedir_set_page(thread_current()->pagedir, se->upage, se->kpage, se->writable) == false){
-        frame_free(se);
+    if(se->kpage == NULL || pagedir_set_page(thread_current()->pagedir, se->upage, se->kpage, se->writable) == false){
+        frame_free(se->kpage,false);
         return false;
     }
-    // ASSERT(pagedir_is_dirty(thread_current()->pagedir,se->kpage)==false);
 
     switch(se->location){
+        case IN_FRAME:
+            ASSERT(0);
+            break;
         case IN_FILESYS:
-            if(se->type == REGU){
-                ASSERT(pagedir_is_dirty(thread_current()->pagedir,se->upage)==false);
-                file_seek(se->file, se->offset);
-                if(file_read(se->file, se->kpage, se->read_bytes) != (int)se->read_bytes){
-                    frame_free(se);
+            ASSERT(pagedir_is_dirty(thread_current()->pagedir,se->upage)==false);
+            if(se->type == REGU || se->type == MMAP){            
+                lock_acquire(&filesys_lock);
+                if(file_read_at(se->file, se->kpage, se->read_bytes, se->offset) != (int)se->read_bytes){
+                    frame_free(se->kpage, false);
                     return false;
                 }
+                lock_release(&filesys_lock);
                 memset(se->kpage + se->read_bytes, 0, se->zero_bytes);
                 break;
             }
             else if(se->type == ANON){
-                ASSERT(pagedir_is_dirty(thread_current()->pagedir,se->upage)==false);
                 memset(se->kpage, 0, PGSIZE);
                 break;
             }
+
         case IN_SWAP:
             pagedir_set_dirty(thread_current()->pagedir,se->upage,true);
+            pagedir_set_accessed(thread_current()->pagedir,se->upage,true);
             swap_in(se);
             break;
     }
     se->location = IN_FRAME;
-
-    // //se->status = IN_FRAME;
-    // if(pagedir_set_page(thread_current()->pagedir, se->upage, se->kpage, se->writable) == false){
-    //     frame_free(se);
-    //     return false;
-    // }
+    /* warning: frame initialization done. need to unpin this frame*/
+    frame_unpin(se->kpage);
 
     return true;
+}
+
+/** 
+ * remove the spage table entry from spage table
+ * WITHOUT freeing the frame entry or physical page or swap entry
+*/
+void 
+spage_remove(struct spage_table_entry* se){
+    struct hash_elem* he = hash_delete(thread_current()->spage_table, &se->spage_elem);
+    if(he != NULL){
+        free(hash_entry(he,struct spage_table_entry, spage_elem));
+    }
 }
 
 /** destroy the spage_table along with frame allocated previous*/
@@ -140,32 +167,24 @@ spage_find(struct thread* t, void* upage){
 }
 
 /** utils functions*/
-static unsigned spage_hash_func(const struct hash_elem *e, void *aux){
+static unsigned spage_hash_func(const struct hash_elem *e, void *aux UNUSED){
     struct spage_table_entry *se = hash_entry(e, struct spage_table_entry, spage_elem);
     return hash_int((int)se->upage);
 }
 
-static bool spage_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux){
+static bool spage_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED){
     struct spage_table_entry *se_a = hash_entry(a, struct spage_table_entry, spage_elem);
     struct spage_table_entry *se_b = hash_entry(b, struct spage_table_entry, spage_elem);
     return se_a->upage < se_b->upage;
 }
 
-static void spage_destroy_func(struct hash_elem *e, void *aux){
+static void spage_destroy_func(struct hash_elem *e, void *aux UNUSED){
     struct spage_table_entry *se = hash_entry(e, struct spage_table_entry, spage_elem);
-    // if(se->status == IN_FRAME){
-    //     frame_remove(se->kpage);
-    // }
-
-    /* 注意spage table上的entry不一定都在frame上，可能在file或swap*/
-    // frame_remove(se->kpage);
-    // if(se->status == IN_SWAP)   swap_free(se->swap_index);
     if(se->location == IN_FRAME){
-        frame_remove(se->kpage);
+        frame_free(se->kpage, false);
     }
     else if(se->location == IN_SWAP){
         swap_free(se->swap_index);
     }
-    
     free(se);
 }

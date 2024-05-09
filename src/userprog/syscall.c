@@ -11,6 +11,10 @@
 #include "devices/input.h"
 #include "vm/spage.h"
 #include "vm/frame.h"
+#include "vm/mmap.h"
+#include <round.h>
+#include "userprog/pagedir.h"
+#include "threads/malloc.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -19,9 +23,6 @@ static void syscall_handler (struct intr_frame *);
 #define FD_MAX 128
 
 #define MAX(a,b) ((a)>(b)?(a):(b))
-
-/** lock for filesys*/
-struct lock filesys_lock;
 
 /** syscall functions*/
 static void sys_halt(void);
@@ -38,8 +39,12 @@ static void sys_seek (int fd, unsigned position);
 static unsigned sys_tell (int fd);
 static void sys_close(int fd);
 
-static void preload_pages(void* buffer, unsigned size);
-static void unpin_pages(void* buffer, unsigned size);
+#ifdef VM
+static mapid_t sys_mmap (int fd, void *addr);
+static void sys_munmap (mapid_t mapping);
+static void preload_pages(const void* buffer, unsigned size);
+static void unpin_pages(const void* buffer, unsigned size);
+#endif
 
 /** utils functions*/
 static int get_user (const uint8_t *uaddr);
@@ -244,6 +249,29 @@ syscall_handler (struct intr_frame *f){
       sys_close(fd);
       break;
     }
+    
+    #ifdef VM
+    case SYS_MMAP:
+    {
+      int fd;
+      void* addr;
+      read_user(&fd,u_ptr,sizeof(int));
+      u_ptr+=sizeof(int);
+      read_user(&addr,u_ptr,sizeof(void*));
+      u_ptr+=sizeof(void*);
+      f->eax=sys_mmap(fd,addr);
+      break;
+    }
+    case SYS_MUNMAP:
+    {
+      mapid_t mapping;
+      read_user(&mapping,u_ptr,sizeof(mapid_t));
+      u_ptr+=sizeof(mapid_t);
+      sys_munmap(mapping);
+      break;
+    }
+    #endif
+    
     default:
     {
       printf("system call %d is not implemented!\n",syscall_num);
@@ -266,6 +294,13 @@ sys_exit(int code_){
   if(pcb!=NULL){
     pcb->exit_status=code_;
   }
+
+  /** destroy the spage_table along with frame allocated previous*/
+#ifdef VM
+  mmap_destroy();
+  spage_destroy();
+#endif
+
   //when the thread_exit is done, all the lock acquired by the thread will be released
   //Thus no need for releasing the lock here
   if(!lock_held_by_current_thread(&filesys_lock)){
@@ -419,7 +454,7 @@ sys_write(int fd,const void* buffer,unsigned size_){
 #ifdef VM
     preload_pages(buffer, size_);
 #endif
-    int size = file_write(file,buffer,size_);
+    size = file_write(file,buffer,size_);
 #ifdef VM
     unpin_pages(buffer, size_);
 #endif
@@ -476,20 +511,100 @@ sys_close(int fd){
   thread_current()->descriptor_table[fd]=NULL;
 }
 
+#ifdef VM
+static mapid_t 
+sys_mmap (int fd, void *uaddr){
+  
+  /* check validity*/
+  if(((unsigned)uaddr&0xfff)!=0|| uaddr == 0){
+    return -1;
+  }
+  struct thread* cur = thread_current();
+  /* the sys_filesize already acquire lock. Thus there's no need for sys_mmap to acquire*/
+  size_t read_bytes = sys_filesize(fd);
+  size_t zero_bytes = ROUND_UP(read_bytes, PGSIZE)-read_bytes;
+  if(read_bytes == 0 ){
+    return -1;
+  }
+  struct file* file=file_reopen(cur->descriptor_table[fd]);
+  if(file == NULL){
+    return -1;
+  }
+  off_t ofs = 0;
+  /* check overlapping*/
+  void* upper_page = pg_round_up(uaddr+read_bytes);
+  for(void* addr = uaddr; addr < upper_page; addr += PGSIZE){
+    struct spage_table_entry* se = spage_find(cur,addr);
+    if(se != NULL){
+      return -1;
+    }
+  }
+
+  /* insert to mmap_table*/
+  struct mmap_table_entry* me = (struct mmap_table_entry* )malloc(sizeof(struct mmap_table_entry));
+  me->addr = uaddr;
+  me->fd = assign_mapid();
+  me->size = read_bytes;
+  hash_insert(cur->mmap_table,&me->mmap_elem);
+
+  /* start to install in spage_table*/
+  while(read_bytes > 0 || zero_bytes > 0){
+    size_t page_read_bytes = read_bytes<PGSIZE? read_bytes : PGSIZE;
+    size_t page_zero_bytes = PGSIZE - page_read_bytes;
+    bool success = spage_install_mmap(uaddr, file, ofs, page_read_bytes, page_zero_bytes, true);
+    if(!success){
+      ASSERT(0);
+    }
+    read_bytes -= page_read_bytes;
+    zero_bytes -= page_zero_bytes;
+    uaddr += PGSIZE;
+    ofs += PGSIZE;
+  }
+  
+  return me->fd;
+}
+
 static void
-preload_pages(void* buffer, unsigned size){
+sys_munmap (mapid_t mapping){
+
+  struct thread* cur = thread_current();
+  struct mmap_table_entry* me = mmap_find(cur,mapping);
+  if(me == NULL){
+    ASSERT(0);
+    return;
+  }
+
+  void* upper_page = pg_round_up(me->addr + me->size);
+  for(void* addr = me->addr;addr<upper_page;addr+=PGSIZE){
+    struct spage_table_entry* se = spage_find(cur,addr);
+    ASSERT(se&&se->type == MMAP);
+    bool is_dirty = pagedir_is_dirty(cur->pagedir,addr);
+    if(se->location == IN_FRAME){
+      if(is_dirty){
+        mmap_write_back(se,false);
+      }
+      frame_free(se->kpage,false);
+    }
+    spage_remove(se);
+  }
+  mmap_remove(me);
+}
+
+static void
+preload_pages(const void* buffer, unsigned size){
   void* start_page_addr = pg_round_down(buffer);
   void* end_page_addr = pg_round_down(buffer + size - 1);
   for(void* addr = start_page_addr; addr <= end_page_addr; addr += PGSIZE){
     struct spage_table_entry* se = spage_find(thread_current(),addr);
-    //spage_load(se);
-    ASSERT(spage_load(se) == true);
+    if(se->location != IN_FRAME){
+      spage_load(se);
+    }
     frame_pin(se->kpage);
   }
 }
 
 static void
-unpin_pages(void* buffer, unsigned size){
+unpin_pages(const void* buffer, unsigned size){
   void* start_page_addr = pg_round_down(buffer);
   void* end_page_addr = pg_round_down(buffer + size - 1);
   for(void* addr = start_page_addr; addr <= end_page_addr; addr += PGSIZE){
@@ -497,7 +612,7 @@ unpin_pages(void* buffer, unsigned size){
     frame_unpin(se->kpage);
   }
 }
-
+#endif
 
 /******************** utils functions*************************/
 

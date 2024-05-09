@@ -11,11 +11,6 @@
 
 #define MAX_STACK_SIZE (1<<23)
 
-// void pagefault_debug(void* fault_addr){
-//    printf("fault_addr : %p\n", fault_addr);
-//    ASSERT(0);
-// }
-
 /** Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -177,32 +172,25 @@ page_fault (struct intr_frame *f)
       if(se == NULL){
          /* stack growth*/
          if(PHYS_BASE > fault_addr && (fault_addr >= user_esp || user_esp - fault_addr <= 32) && PHYS_BASE-MAX_STACK_SIZE <= fault_addr){
-            // void* kpage = frame_allocate(PAL_USER|PAL_ZERO, fault_page);
-            // ASSERT(kpage != NULL);
-            // pagedir_set_page(thread_current()->pagedir,fault_page, kpage, true);
-            // spage_install_frame(fault_page, kpage, true);
             spage_install_zero(fault_page, true);
             return;
          }
          else{
-            //pagefault_debug(fault_addr);
+            /* Segmentation fault*/
             goto FAULTROUTINE;
-            //ASSERT(false);
          }
       }
-      /* file, swap, zero*/
+      /* file, swap*/
       else{
-         //ASSERT(se->status != IN_FRAME);
+         ASSERT(se->location != IN_FRAME);
          ASSERT(spage_load(se)==true);
          return;
       }
    }
-   // r/o rights fault
+   /* deny read only write*/
    else{
-      //ASSERT(0);
       goto FAULTROUTINE;
    }
-
 #endif
 
 FAULTROUTINE:

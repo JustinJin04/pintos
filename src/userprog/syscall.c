@@ -393,8 +393,7 @@ sys_read(int fd,void* buffer,unsigned size_){
   if(fd<0||fd>=FD_MAX){
     sys_exit(-1);
   }
-  check_user_address(buffer,size_);
-  //check_user_address_debug(buffer,size_);
+  check_user_address(buffer,size_);;
 
   int size;
   lock_acquire(&filesys_lock);
@@ -433,8 +432,7 @@ sys_write(int fd,const void* buffer,unsigned size_){
   if(fd<0||fd>=FD_MAX){
     sys_exit(-1);
   }
-  // check_user_ptr(buffer);
-  check_user_address_debug(buffer,size_);
+  check_user_address(buffer,size_);
   
   lock_acquire(&filesys_lock);
 

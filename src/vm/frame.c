@@ -131,10 +131,14 @@ frame_eviction(){
     if(is_dirty){
         /* write back to file*/
         if(se->type == MMAP){
+            se->location = IN_FILESYS;
+            pagedir_clear_page(t->pagedir,fe->upage);
             mmap_write_back(se, false);
         }
         /* swap space swapping*/
         else{
+            se->location = IN_SWAP;
+            pagedir_clear_page(t->pagedir,fe->upage);
             swap_out(se);
         }
     }
